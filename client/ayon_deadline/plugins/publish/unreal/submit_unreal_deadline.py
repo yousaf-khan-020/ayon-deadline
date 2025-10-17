@@ -1,4 +1,5 @@
 import os
+import ayon_api
 from dataclasses import dataclass, field, asdict
 import pyblish.api
 from datetime import datetime
@@ -12,6 +13,7 @@ from ayon_deadline import abstract_submit_deadline
 @dataclass
 class DeadlinePluginInfo:
     ProjectFile: str = field(default=None)
+    Executable: str = field(default=None)
     EditorExecutableName: str = field(default=None)
     EngineVersion: str = field(default=None)
     CommandLineMode: str = field(default=True)
@@ -43,9 +45,16 @@ class UnrealSubmitDeadline(
 
     def get_job_info(self, job_info=None):
         instance = self._instance
-
+        
+        #con = ayon_api.get_server_api_connection()
+        
+        #project = os.environ.get("AYON_PROJECT_NAME")
+        #project_entity = ayon_api.get(f"projects/{project}")
+        #render_path = project_entity["config"]["roots"]["renders"]["windows"]
+        
         job_info.BatchName = self._get_batch_name()
         job_info.Plugin = "UnrealEngine5"
+        #job_info.OutputDirectory[0] = render_path
 
         # already collected explicit values for rendered Frames
         if (
@@ -62,21 +71,39 @@ class UnrealSubmitDeadline(
 
     def get_plugin_info(self):
         deadline_plugin_info = DeadlinePluginInfo()
+        
+        con = ayon_api.get_server_api_connection()
+        
+        project = os.environ.get("AYON_PROJECT_NAME")
+        project_entity = ayon_api.get(f"projects/{project}")
+        project_root = project_entity["config"]["roots"]["work_unreal_server"]["windows"]
+        render_path = project_entity["config"]["roots"]["renders"]["windows"]
 
-        render_path = self._instance.data["expectedFiles"][0]
-        self._instance.data["outputDir"] = os.path.dirname(render_path)
+        #render_path = self._instance.data["expectedFiles"][0]
+        #self._instance.data["outputDir"] = os.path.dirname(render_path)
+        #self._instance.data["outputDir"] = os.path.dirname(render_path)
+        #self._instance.data["stagingDir"] = render_path
+        self._instance.data["outputDir"] = render_path
+        #self._instance.context.data["instances"][0]["representations"][0]["stagingDir"]
         self._instance.context.data["version"] = 1  #TODO
 
-        render_dir = os.path.dirname(render_path)
+        #render_dir = os.path.dirname(render_path)
         file_name = self._instance.data["file_names"][0]
-        render_path = os.path.join(render_dir, file_name)
+        render_path = os.path.join(render_path, file_name)
 
-        deadline_plugin_info.ProjectFile = self.scene_path
+        #deadline_plugin_info.ProjectFile = self.scene_path
+        deadline_plugin_info.ProjectFile = project_root
         deadline_plugin_info.Output = render_path.replace("\\", "/")
-
+        #deadline_plugin_info.OutputFilePath = os.path.dirname(deadline_plugin_info.Output)
+        
         deadline_plugin_info.EditorExecutableName = "UnrealEditor-Cmd.exe"
         deadline_plugin_info.EngineVersion = self._instance.data["app_version"]
+        unreal_exe_path = (f"C:\\Program Files\\Epic Games\\UE_{deadline_plugin_info.EngineVersion}\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe")
+        deadline_plugin_info.Executable = unreal_exe_path
+        deadline_plugin_info.StartupDirectory = str(Path(unreal_exe_path).parent)
+        
         master_level = self._instance.data["master_level"]
+        master_level = master_level.rsplit('.', 1)[0]
         render_queue_path = self._instance.data["render_queue_path"]
         cmd_args = [
             master_level,
@@ -87,6 +114,23 @@ class UnrealSubmitDeadline(
             "-StdOut",
             "-allowStdOutLogVerbosity",
             "-Unattended",
+            "-renderoffscreen",
+            "-NoSound",
+            "-NoSplash",
+            "-NoWindow",
+            "-DDC-ForceMemoryCache",
+            #self._instance.data["expectedFiles"][0],
+            #render_dir,
+            #self._instance.data["file_names"],
+            #self._instance.data["file_names"][0],
+            #self.scene_path,
+            #....
+            #project_root,
+            #render_path,
+            #render_dir,
+            #project_entity["config"]["roots"]["renders"]["windows"],
+            #.....
+            #self._instance.context.data,
         ]
         self.log.debug(f"cmd-args::{cmd_args}")
         deadline_plugin_info.CommandLineArguments = " ".join(cmd_args)
