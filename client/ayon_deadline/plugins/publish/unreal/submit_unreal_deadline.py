@@ -119,18 +119,6 @@ class UnrealSubmitDeadline(
             "-NoSplash",
             "-NoWindow",
             "-DDC-ForceMemoryCache",
-            #self._instance.data["expectedFiles"][0],
-            #render_dir,
-            #self._instance.data["file_names"],
-            #self._instance.data["file_names"][0],
-            #self.scene_path,
-            #....
-            #project_root,
-            #render_path,
-            #render_dir,
-            #project_entity["config"]["roots"]["renders"]["windows"],
-            #.....
-            #self._instance.context.data,
         ]
         self.log.debug(f"cmd-args::{cmd_args}")
         deadline_plugin_info.CommandLineArguments = " ".join(cmd_args)
