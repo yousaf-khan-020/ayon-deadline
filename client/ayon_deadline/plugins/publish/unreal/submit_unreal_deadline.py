@@ -89,11 +89,11 @@ class UnrealSubmitDeadline(
 
         #render_dir = os.path.dirname(render_path)
         file_name = self._instance.data["file_names"][0]
-        render_path = os.path.join(render_path, file_name)
+        files_render_path = os.path.join(render_path, file_name)
 
         #deadline_plugin_info.ProjectFile = self.scene_path
         deadline_plugin_info.ProjectFile = project_root
-        deadline_plugin_info.Output = render_path.replace("\\", "/")
+        deadline_plugin_info.Output = files_render_path.replace("\\", "/")
         #deadline_plugin_info.OutputFilePath = os.path.dirname(deadline_plugin_info.Output)
         
         deadline_plugin_info.EditorExecutableName = "UnrealEditor-Cmd.exe"
@@ -103,12 +103,19 @@ class UnrealSubmitDeadline(
         deadline_plugin_info.StartupDirectory = str(Path(unreal_exe_path).parent)
         
         master_level = self._instance.data["master_level"]
-        master_level = master_level.rsplit('.', 1)[0]
+        master_level_name = master_level.rsplit('.', 1)[0]
+        master_sequence = self._instance.data["master_sequence"]
+        master_sequence_name = master_sequence.rsplit('.', 1)[0]
         render_queue_path = self._instance.data["render_queue_path"]
         cmd_args = [
-            master_level,
-            "-game",
+            master_level_name,
+            #"-game",
             f"-MoviePipelineConfig={render_queue_path}",
+            f"-LevelSequence={master_sequence_name}",
+            f"-Map={master_level}",
+            f"-Unreal={deadline_plugin_info.EngineVersion}",
+            f"-Project={project_root}",
+            f"-Renders={render_path}",
             "-windowed",
             "-Log",
             "-StdOut",
@@ -119,6 +126,8 @@ class UnrealSubmitDeadline(
             "-NoSplash",
             "-NoWindow",
             "-DDC-ForceMemoryCache",
+            "-run=pythonscript",
+            "-script=\\\\10.21.110.15\\technology\\deployment\\ayon_scripts\\custom_mrq_script\\create_mrq_and_render.py",
         ]
         self.log.debug(f"cmd-args::{cmd_args}")
         deadline_plugin_info.CommandLineArguments = " ".join(cmd_args)
