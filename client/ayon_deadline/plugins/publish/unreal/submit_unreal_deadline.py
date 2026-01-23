@@ -75,75 +75,82 @@ class UnrealSubmitDeadline(
         
         con = ayon_api.get_server_api_connection()
         
+        farm_rendering = True
+        if "render.local_machine" in self._instance.data["families"]:
+            farm_rendering = False
+        
         project = os.environ.get("AYON_PROJECT_NAME")
         project_entity = ayon_api.get(f"projects/{project}")
         local_project_root = project_entity["config"]["roots"]["work_unreal"]["windows"]
         project_root = project_entity["config"]["roots"]["work_unreal_server"]["windows"]
         render_path = project_entity["config"]["roots"]["renders"]["windows"]
         
+        if not farm_rendering:
+            project_root = os.path.join(local_project_root, os.path.basename(os.path.dirname(project_root)), os.path.basename(project_root))
+        
         # --- Git Variables ---------------------------------------------------------
-        ORG = "frankvaliant"
-        PAT = "4nHIQJLb4PDyxshKT5964V25qKiaudYeRVOnDol4UeIsraqi3zpRJQQJ99CAACAAAAAT9cK1AAASAZDO34sG"
-        GIT_BASH = r"C:\Program Files\Git\bin\bash.exe"
+        if farm_rendering:
+            ORG = "frankvaliant"
+            GIT_BASH = r"C:\Program Files\Git\bin\bash.exe"
 
-        auto_commit_message = "Auto commit before Rendering"
-        server_project_path = os.path.dirname(project_root)
-        project_name = os.path.basename(server_project_path)
-        local_project_path = f"{local_project_root}/{project_name}"
-        self.log.debug(f">>> Local path: {local_project_path}")
-        self.log.debug(f">>> Server path: {server_project_path}")
-        self.log.debug(f">>> Project Name: {project_name}")
+            auto_commit_message = "Auto commit before Rendering"
+            server_project_path = os.path.dirname(project_root)
+            project_name = os.path.basename(server_project_path)
+            local_project_path = f"{local_project_root}/{project_name}"
+            self.log.debug(f">>> Local path: {local_project_path}")
+            self.log.debug(f">>> Server path: {server_project_path}")
+            self.log.debug(f">>> Project Name: {project_name}")
 
-        repo_url = f"https://{PAT}@dev.azure.com/{ORG}/{project_name}/_git/{project_name}"
+            repo_url = f"https://dev.azure.com/{ORG}/{project_name}/_git/{project_name}"
 
-        # --- Git Commit and Push ---------------------------------------------------
-        subprocess.check_call(["git", "-C", local_project_path, "remote", "set-url", "origin", repo_url])
-        subprocess.check_call(["git", "-C", local_project_path, "add", "."])
-        
-        try:
-            subprocess.check_call(["git", "-C", local_project_path, "commit", "-m", auto_commit_message])
-        except subprocess.CalledProcessError as e:
-            self.log.debug("Nothing to commit or an error occurred:", e)
-
-        
-        push_result = subprocess.run(
-            ["git", "-C", local_project_path, "push", "-u", "origin", "master"],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-
-        self.log.debug(f"stdout: {push_result.stdout}")
-        self.log.debug(f"stderr: {push_result.stderr}")
-        self.log.debug(f"returncode: {push_result.returncode}")
-
-        # --- Pull from git on Server -----------------------------------------------
-        if not os.path.exists(server_project_path):
-            self.log.debug(f">>> Cloning repository to: {server_project_path}")
-            subprocess.check_call(["git", "clone", repo_url, server_project_path])
-        else:           
-            self.log.debug(f">>> Pulling latest changes to: {server_project_path}")
+            # --- Git Commit and Push ---------------------------------------------------
+            subprocess.check_call(["git", "-C", local_project_path, "remote", "set-url", "origin", repo_url])
+            subprocess.check_call(["git", "-C", local_project_path, "add", "."])
             
-            subprocess.run(
-                ["git", "-C", server_project_path, "fetch", "origin"],
-                check=True
-            )
+            try:
+                subprocess.check_call(["git", "-C", local_project_path, "commit", "-m", auto_commit_message])
+            except subprocess.CalledProcessError as e:
+                self.log.debug("Nothing to commit or an error occurred:", e)
 
-            subprocess.run(
-                ["git", "-C", server_project_path, "checkout", "master"],
-                check=True
-            )
-
-            pull_result = subprocess.run(
-                ["git", "-C", server_project_path, "reset", "--hard", "origin/master"],
+            
+            push_result = subprocess.run(
+                ["git", "-C", local_project_path, "push", "-u", "origin", "master"],
                 capture_output=True,
                 text=True,
-                check=True
+                check=False
             )
-            
-            self.log.debug(f"stdout: {pull_result.stdout}")
-            self.log.debug(f"stderr: {pull_result.stderr}")
-            self.log.debug(f"returncode: {pull_result.returncode}")
+
+            self.log.debug(f"stdout: {push_result.stdout}")
+            self.log.debug(f"stderr: {push_result.stderr}")
+            self.log.debug(f"returncode: {push_result.returncode}")
+
+            # --- Pull from git on Server -----------------------------------------------
+            if not os.path.exists(server_project_path):
+                self.log.debug(f">>> Cloning repository to: {server_project_path}")
+                subprocess.check_call(["git", "clone", repo_url, server_project_path])
+            else:           
+                self.log.debug(f">>> Pulling latest changes to: {server_project_path}")
+                
+                subprocess.run(
+                    ["git", "-C", server_project_path, "fetch", "origin"],
+                    check=True
+                )
+
+                subprocess.run(
+                    ["git", "-C", server_project_path, "checkout", "master"],
+                    check=True
+                )
+
+                pull_result = subprocess.run(
+                    ["git", "-C", server_project_path, "reset", "--hard", "origin/master"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                
+                self.log.debug(f"stdout: {pull_result.stdout}")
+                self.log.debug(f"stderr: {pull_result.stderr}")
+                self.log.debug(f"returncode: {pull_result.returncode}")
 
         #render_path = self._instance.data["expectedFiles"][0]
         #self._instance.data["outputDir"] = os.path.dirname(render_path)
@@ -152,6 +159,8 @@ class UnrealSubmitDeadline(
         self._instance.data["outputDir"] = render_path
         #self._instance.context.data["instances"][0]["representations"][0]["stagingDir"]
         self._instance.context.data["version"] = 1  #TODO
+        temp = self._instance.data["families"]
+        self.log.debug(f"local:{temp}")
 
         #render_dir = os.path.dirname(render_path)
         file_name = self._instance.data["file_names"][0]
@@ -195,7 +204,7 @@ class UnrealSubmitDeadline(
             "-run=pythonscript",
             "-script=\\\\10.21.110.15\\technology\\deployment\\ayon_scripts\\custom_mrq_script\\create_mrq_and_render.py",
         ]
-        self.log.debug(f"cmd-args::{cmd_args}")
+        self.log.debug(f"cmd-args: {cmd_args}")
         deadline_plugin_info.CommandLineArguments = " ".join(cmd_args)
 
         # if Perforce - triggered by active `changelist_metadata` instance!!
