@@ -83,8 +83,12 @@ class UnrealSubmitDeadline(
         task_name = os.environ.get("AYON_TASK_NAME")
         project_entity = ayon_api.get(f"projects/{project}")
         local_project_root = project_entity["config"]["roots"]["work_unreal"]["windows"]
-        project_root = project_entity["config"]["roots"]["work_unreal_server"]["windows"]
+        project_root = project_entity["config"]["roots"]["work"]["windows"]
         render_path = project_entity["config"]["roots"]["renders"]["windows"]
+        
+        #project_root = os.path.join(project_root, project, "unreal_project", task_name, f"{task_name}.uproject")
+        project_root = os.path.join("Y:\\", "unreal_projects", task_name, f"{task_name}.uproject")
+        self.log.debug(f">>> Project root: {project_root}")
         
         if not farm_rendering:
             project_root = os.path.join(local_project_root, os.path.basename(os.path.dirname(project_root)), os.path.basename(project_root))
@@ -96,14 +100,13 @@ class UnrealSubmitDeadline(
 
             auto_commit_message = "Auto commit before Rendering"
             server_project_path = os.path.dirname(project_root)
-            project_name = os.path.basename(server_project_path)
-            local_project_path = f"{local_project_root}/{project_name}"
+            local_project_path = f"{local_project_root}/{task_name}"
             self.log.debug(f">>> Local path: {local_project_path}")
             self.log.debug(f">>> Server path: {server_project_path}")
-            self.log.debug(f">>> Project Name: {project_name}")
+            self.log.debug(f">>> Project Name: {project}")
             self.log.debug(f">>> Task Name: {task_name}")
 
-            repo_url = f"https://dev.azure.com/{ORG}/{project_name}/_git/{project_name}"
+            repo_url = f"https://dev.azure.com/{ORG}/{task_name}/_git/{task_name}"
 
             # --- Git Commit and Push ---------------------------------------------------
             subprocess.check_call(["git", "-C", local_project_path, "remote", "set-url", "origin", repo_url])
@@ -114,7 +117,6 @@ class UnrealSubmitDeadline(
             except subprocess.CalledProcessError as e:
                 self.log.debug("Nothing to commit or an error occurred:", e)
 
-            
             push_result = subprocess.run(
                 ["git", "-C", local_project_path, "push", "-u", "origin", "master"],
                 capture_output=True,
@@ -126,29 +128,62 @@ class UnrealSubmitDeadline(
             self.log.debug(f"stderr: {push_result.stderr}")
             self.log.debug(f"returncode: {push_result.returncode}")
 
+            # --- Resolve Server git ownership of project -------------------------------
+            result = subprocess.run(
+                ["git", "config", "--global", "--get-all", "safe.directory"],
+                capture_output=True,
+                text=True
+            )
+            
+            if server_project_path not in result.stdout:
+                self.log.debug(f"Adding safe directory: {server_project_path}")
+                subprocess.run(
+                    ["git", "config", "--global", "--add", "safe.directory", server_project_path],
+                    check=True
+                )
+            
             # --- Pull from git on Server -----------------------------------------------
             if not os.path.exists(server_project_path):
+                self.log.debug(">>> Git settings setup started...")
+                subprocess.run(["git", "config", "--global", "lfs.concurrenttransfers", "32"], check=True)
+                subprocess.run(["git", "config", "--global", "lfs.batch", "true"], check=True)
+                subprocess.run(["git", "config", "--global", "http.lowSpeedLimit", "100"], check=True)
+                subprocess.run(["git", "config", "--global", "http.lowSpeedTime", "300"], check=True)
+                subprocess.run(["git", "config", "--global", "http.version", "HTTP/1.1"], check=True)
+                #subprocess.check_call(["git", "clone", repo_url, server_project_path])
+                #subprocess.run(["git", "clone", repo_url, server_project_path], check=True)
+                # Shallow clone
                 self.log.debug(f">>> Cloning repository to: {server_project_path}")
-                subprocess.check_call(["git", "clone", repo_url, server_project_path])
-            else:           
+                subprocess.run(
+                    ["git", "clone", "--depth", "1", repo_url, server_project_path],
+                    check=True,
+                    env={**os.environ, "GIT_LFS_SKIP_SMUDGE": "1"}
+                )
+                # LFS pull
+                self.log.debug(f">>> Git LFS pull to: {server_project_path}")
+                subprocess.run(
+                    ["git", "-C", server_project_path, "lfs", "pull"],
+                    check=True,
+                )
+            else:
+                lock_file = os.path.join(server_project_path, ".git", "index.lock")
+                if os.path.exists(lock_file):
+                    self.log.debug(f">>> Trying to remove git index.lock file...")
+                    try:
+                        os.remove(lock_file)
+                        self.log.debug(f">>> Git index.lock file removed!")
+                    except Exception as e:
+                        self.log.debug(f"Failed to remove index.lock: {e}")
+                    
                 self.log.debug(f">>> Pulling latest changes to: {server_project_path}")
                 
-                subprocess.run(
-                    ["git", "-C", server_project_path, "fetch", "origin"],
-                    check=True
-                )
+                subprocess.run(["git", "-C", server_project_path, "fetch", "origin"], check=True)
 
-                subprocess.run(
-                    ["git", "-C", server_project_path, "checkout", "master"],
-                    check=True
-                )
+                subprocess.run(["git", "-C", server_project_path, "checkout", "master"], check=True)
 
-                pull_result = subprocess.run(
-                    ["git", "-C", server_project_path, "reset", "--hard", "origin/master"],
-                    capture_output=True,
-                    text=True,
-                    check=True
-                )
+                pull_result = subprocess.run(["git", "-C", server_project_path, "reset", "--hard", "origin/master"], capture_output=True, text=True, check=True)
+                
+                #subprocess.run(["git", "-C", server_project_path, "clean", "-fd"], check=False)
                 
                 self.log.debug(f"stdout: {pull_result.stdout}")
                 self.log.debug(f"stderr: {pull_result.stderr}")
