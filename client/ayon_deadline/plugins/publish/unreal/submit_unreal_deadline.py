@@ -80,6 +80,7 @@ class UnrealSubmitDeadline(
             farm_rendering = False
         
         project = os.environ.get("AYON_PROJECT_NAME")
+        task_name = os.environ.get("AYON_TASK_NAME")
         project_entity = ayon_api.get(f"projects/{project}")
         local_project_root = project_entity["config"]["roots"]["work_unreal"]["windows"]
         project_root = project_entity["config"]["roots"]["work_unreal_server"]["windows"]
@@ -100,6 +101,7 @@ class UnrealSubmitDeadline(
             self.log.debug(f">>> Local path: {local_project_path}")
             self.log.debug(f">>> Server path: {server_project_path}")
             self.log.debug(f">>> Project Name: {project_name}")
+            self.log.debug(f">>> Task Name: {task_name}")
 
             repo_url = f"https://dev.azure.com/{ORG}/{project_name}/_git/{project_name}"
 
